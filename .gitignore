@@ -1,0 +1,57 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+dist/
+web-build/
+build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+/ios
+/android
+*.orig.*
+
+# Metro
+.metro-health-check*
+
+# testing
+coverage/
+
+# debug / logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# editors — shared settings/extensions are tracked deliberately (no personal paths, tokens, or accounts in them)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# signing
+*.keystore
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# typescript
+*.tsbuildinfo
