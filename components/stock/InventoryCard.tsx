@@ -147,18 +147,18 @@ export function InventoryCard({
                 <TextField
                   value={priceInput}
                   onChangeText={setPriceInput}
-                  onEndEditing={commitPriceInfo}
+                  onBlur={commitPriceInfo}
                   placeholder="Price paid"
                   keyboardType="numeric"
                   style={styles.quantityInput}
                 />
-                <TextField value={storeInput} onChangeText={setStoreInput} onEndEditing={commitPriceInfo} placeholder="Store" style={styles.unitInput} />
+                <TextField value={storeInput} onChangeText={setStoreInput} onBlur={commitPriceInfo} placeholder="Store" style={styles.unitInput} />
               </View>
               <View style={styles.row}>
                 <TextField
                   value={packageQuantityInput}
                   onChangeText={setPackageQuantityInput}
-                  onEndEditing={commitPriceInfo}
+                  onBlur={commitPriceInfo}
                   placeholder="Package qty"
                   keyboardType="numeric"
                   style={styles.quantityInput}
@@ -166,7 +166,7 @@ export function InventoryCard({
                 <TextField
                   value={packageUnitInput}
                   onChangeText={setPackageUnitInput}
-                  onEndEditing={commitPriceInfo}
+                  onBlur={commitPriceInfo}
                   placeholder="Package unit"
                   style={styles.unitInput}
                 />

@@ -7,6 +7,7 @@ import { CostSection } from '@/components/recipes/CostSection';
 import { NutritionSection } from '@/components/recipes/NutritionSection';
 import { Card } from '@/components/ui/Card';
 import { IconButton } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EFFORT_OPTIONS, MEAL_TYPE_OPTIONS } from '@/constants/mealOptions';
 import { enterFade, exitFade, layoutTransition } from '@/constants/motion';
 import { colors, iconSize, spacing, typography } from '@/constants/theme';
@@ -51,6 +52,7 @@ export function RecipeListItem({
   onRemove,
 }: RecipeListItemProps) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const reducedMotion = useReducedMotionPreference();
   const mealTypeLabel = recipe.mealType.map((type) => labelFor(MEAL_TYPE_OPTIONS, type)).join(', ');
   const effortLabel = labelFor(EFFORT_OPTIONS, recipe.effort);
@@ -96,7 +98,7 @@ export function RecipeListItem({
               accessibilityLabel={recipe.isFavorite ? `Unfavorite ${recipe.name}` : `Favorite ${recipe.name}`}
               onPress={() => onToggleFavorite(recipe.id)}
             />
-            <IconButton icon="trash-outline" variant="danger" accessibilityLabel={`Remove ${recipe.name}`} onPress={() => onRemove(recipe.id)} />
+            <IconButton icon="trash-outline" variant="danger" accessibilityLabel={`Remove ${recipe.name}`} onPress={() => setConfirmRemove(true)} />
           </View>
 
           {recipe.categories.length > 0 && <Text style={styles.categories}>{recipe.categories.join(', ')}</Text>}
@@ -121,6 +123,19 @@ export function RecipeListItem({
         </Animated.View>
       )}
       </Card>
+
+      <ConfirmDialog
+        visible={confirmRemove}
+        title="Remove this recipe?"
+        message={`"${recipe.name}" will be permanently removed. Meals already logged or planned from it are unaffected.`}
+        confirmLabel="Remove"
+        destructive
+        onConfirm={() => {
+          setConfirmRemove(false);
+          onRemove(recipe.id);
+        }}
+        onCancel={() => setConfirmRemove(false)}
+      />
     </Animated.View>
   );
 }

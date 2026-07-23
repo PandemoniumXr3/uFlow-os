@@ -103,7 +103,7 @@ export function ProductListItem({
                       <TextField
                         value={priceInput}
                         onChangeText={setPriceInput}
-                        onEndEditing={() =>
+                        onBlur={() =>
                           onChangePriceInfo?.({ lastPurchasePriceCents: parseToCents(priceInput) ?? undefined, store: storeInput.trim() || undefined })
                         }
                         placeholder="Price paid"
@@ -113,7 +113,7 @@ export function ProductListItem({
                       <TextField
                         value={storeInput}
                         onChangeText={setStoreInput}
-                        onEndEditing={() =>
+                        onBlur={() =>
                           onChangePriceInfo?.({ lastPurchasePriceCents: parseToCents(priceInput) ?? undefined, store: storeInput.trim() || undefined })
                         }
                         placeholder="Store"

@@ -170,7 +170,7 @@ export default function SettingsScreen() {
                     <TextField
                       value={weeklyBudgetInput}
                       onChangeText={setWeeklyBudgetInput}
-                      onEndEditing={() => setBudgetPreferences({ weeklyBudgetCents: parseToCents(weeklyBudgetInput) ?? undefined })}
+                      onBlur={() => setBudgetPreferences({ weeklyBudgetCents: parseToCents(weeklyBudgetInput) ?? undefined })}
                       placeholder="e.g. 50"
                       keyboardType="numeric"
                       style={styles.budgetInput}
@@ -196,7 +196,7 @@ export default function SettingsScreen() {
                   <TextField
                     value={maxMealCostInput}
                     onChangeText={setMaxMealCostInput}
-                    onEndEditing={() =>
+                    onBlur={() =>
                       setBudgetPreferences({ preferredMaxMealCostCents: parseToCents(maxMealCostInput) ?? undefined })
                     }
                     placeholder="e.g. 5"
@@ -207,7 +207,7 @@ export default function SettingsScreen() {
                   <TextField
                     value={defaultStoreInput}
                     onChangeText={setDefaultStoreInput}
-                    onEndEditing={() => setBudgetPreferences({ defaultStore: defaultStoreInput.trim() || undefined })}
+                    onBlur={() => setBudgetPreferences({ defaultStore: defaultStoreInput.trim() || undefined })}
                     placeholder="e.g. Albert Heijn"
                   />
 
