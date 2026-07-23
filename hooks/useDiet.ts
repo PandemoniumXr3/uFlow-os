@@ -7,7 +7,9 @@ function toggleValue<T>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
 
-// The current dev profile is vegetarian — seeded once for a brand-new profile only.
+// The current dev profile is vegetarian — seeded once for a brand-new profile only, and only in
+// development builds. A real new user (including anyone going through onboarding's optional Food
+// Profile step) must start from a genuinely blank DietProfile, never a pre-selected diet.
 const DEV_PROFILE_DIET_SEED: DietProfile = { active: ['vegetarian'], matchDietOnly: false };
 
 export function useDiet() {
@@ -15,7 +17,8 @@ export function useDiet() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    dietStorageService.seedIfEmpty(DEV_PROFILE_DIET_SEED).then((stored) => {
+    const load = __DEV__ ? dietStorageService.seedIfEmpty(DEV_PROFILE_DIET_SEED) : dietStorageService.get();
+    load.then((stored) => {
       setProfile(stored);
       setIsLoading(false);
     });

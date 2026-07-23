@@ -13,6 +13,7 @@ import { TextField } from '@/components/ui/TextField';
 import { enterFade, exitFade, layoutTransition } from '@/constants/motion';
 import { NUTRIENT_OPTIONS } from '@/constants/nutritionOptions';
 import { colors, iconSize, spacing, typography } from '@/constants/theme';
+import { useDemoData } from '@/hooks/useDemoData';
 import { useDismissals } from '@/hooks/useDismissals';
 import { useProfile } from '@/hooks/useProfile';
 import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference';
@@ -33,8 +34,18 @@ const ROWS: SettingsRow[] = [
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { profile, setNutritionTrackingEnabled, hiddenNutrients, toggleNutrientVisibility, budgetPreferences, setBudgetPreferences } =
-    useProfile();
+  const {
+    profile,
+    setNutritionTrackingEnabled,
+    hiddenNutrients,
+    toggleNutrientVisibility,
+    budgetPreferences,
+    setBudgetPreferences,
+    contextIntelligenceEnabled,
+    setContextIntelligenceEnabled,
+    rerunOnboarding,
+  } = useProfile();
+  const demoData = useDemoData();
   const reducedMotion = useReducedMotionPreference();
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const { clearHistory } = useDismissals();
@@ -66,10 +77,71 @@ export default function SettingsScreen() {
     setSuggestionsCleared(true);
   }
 
+  function handleRerunOnboarding() {
+    rerunOnboarding();
+    router.push('/onboarding');
+  }
+
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: true, title: 'Settings' }} />
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <View style={styles.section}>
+          <SectionHeader title="Getting started" />
+          <Card variant="standard" style={styles.groupCard}>
+            <Pressable style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={handleRerunOnboarding}>
+              <Ionicons name="rocket-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Rerun setup</Text>
+                <Text style={styles.rowDescription}>Rerunning setup will not delete your current data.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={iconSize.sm} color={colors.textTertiary} />
+            </Pressable>
+
+            <Pressable style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]} onPress={() => router.push('/tolerance')}>
+              <Ionicons name="restaurant-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Review food profile</Text>
+                <Text style={styles.rowDescription}>Allergies, intolerances, and safe/familiar preferences.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={iconSize.sm} color={colors.textTertiary} />
+            </Pressable>
+
+            <View style={[styles.row, styles.rowDivider]}>
+              <Ionicons name="pulse-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Context Intelligence</Text>
+                <Text style={styles.rowDescription}>Suggestions adapt to hunger, energy, time, and location.</Text>
+              </View>
+              <Switch
+                value={contextIntelligenceEnabled}
+                onValueChange={setContextIntelligenceEnabled}
+                accessibilityLabel={`Context Intelligence, ${contextIntelligenceEnabled ? 'enabled' : 'disabled'}`}
+                trackColor={{ false: colors.border, true: colors.accentBlueMuted }}
+                thumbColor={contextIntelligenceEnabled ? colors.accentBlue : colors.textTertiary}
+              />
+            </View>
+
+            {demoData.isLoading ? null : demoData.isInstalled ? (
+              <Pressable style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]} onPress={() => demoData.remove()}>
+                <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowLabel, styles.destructiveLabel]}>Remove demo data</Text>
+                  <Text style={styles.rowDescription}>Removes only the demo Stock, recipes, and plan. Your own data is unaffected.</Text>
+                </View>
+              </Pressable>
+            ) : (
+              <Pressable style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]} onPress={() => demoData.install()}>
+                <Ionicons name="sparkles-outline" size={iconSize.md} color={colors.accentBlue} />
+                <View style={styles.rowText}>
+                  <Text style={styles.rowLabel}>Install demo data</Text>
+                  <Text style={styles.rowDescription}>See a working example — Stock, a planned meal, and Grocery.</Text>
+                </View>
+              </Pressable>
+            )}
+          </Card>
+        </View>
+
         <View style={styles.section}>
           <SectionHeader title="Food preferences" />
           <Card variant="standard" style={styles.groupCard}>

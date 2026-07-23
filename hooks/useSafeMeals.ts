@@ -10,12 +10,13 @@ export function useSafeMeals() {
 
   useEffect(() => {
     safeMealsStorageService.get().then(async (stored) => {
-      if (stored.recipeIds.length > 0) {
+      if (stored.recipeIds.length > 0 || !__DEV__) {
         setProfile(stored);
         setIsLoading(false);
         return;
       }
 
+      // Dev/testing-only seed (see constants/safeMealsSeed.ts) — a real new user starts empty.
       const seeded = await safeMealsStorageService.seedIfEmpty({
         recipeIds: DEFAULT_SAFE_MEAL_IDS,
         showSafeOnly: false,
