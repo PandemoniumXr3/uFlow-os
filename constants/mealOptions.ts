@@ -1,4 +1,4 @@
-import type { Effort, MealCategory, MealType } from '@/types/recipe';
+import type { CookingEquipment, Effort, MealCategory, MealType } from '@/types/recipe';
 
 export const MEAL_TYPE_OPTIONS: { value: MealType; label: string }[] = [
   { value: 'breakfast', label: 'Breakfast' },
@@ -30,4 +30,13 @@ export const EFFORT_OPTIONS: { value: Effort; label: string }[] = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
+];
+
+export const EQUIPMENT_OPTIONS: { value: CookingEquipment; label: string; icon: string }[] = [
+  { value: 'oven', label: 'Oven', icon: 'flame-outline' },
+  { value: 'stovetop', label: 'Stovetop', icon: 'flame-outline' },
+  { value: 'microwave', label: 'Microwave', icon: 'radio-outline' },
+  { value: 'blender', label: 'Blender', icon: 'flask-outline' },
+  { value: 'airFryer', label: 'Air Fryer', icon: 'aperture-outline' },
+  { value: 'noCookRequired', label: 'No cook required', icon: 'checkmark-done-outline' },
 ];

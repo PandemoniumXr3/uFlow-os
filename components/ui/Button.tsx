@@ -27,6 +27,8 @@ export function Button({ label, onPress, variant = 'primary', disabled, loading,
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled }}
       style={({ pressed }) => [
         styles.base,
         compact && styles.compact,
@@ -63,6 +65,7 @@ export function IconButton({ icon, onPress, variant = 'default', accessibilityLa
     <Pressable
       onPress={onPress}
       accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
       hitSlop={8}
       style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
       <Ionicons name={icon} size={iconSize.md} color={iconButtonColor[variant]} />

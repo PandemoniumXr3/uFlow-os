@@ -30,13 +30,20 @@ export type CookingEquipment = 'oven' | 'stovetop' | 'microwave' | 'blender' | '
  * availability rely on), which stays untouched. `productId`, when set,
  * skips the fuzzy name match; otherwise `name` is matched the same way
  * ingredients already are. Absent quantity/unit means "not enough data to
- * price this line" — never assumed, never defaulted.
+ * price this line" — never assumed, never defaulted. `id` is absent on
+ * every line written before the ingredient builder existed — the editor
+ * assigns one on load so reorder/remove/duplicate-detection have a stable
+ * key, but nothing ever requires it to be present for cost/availability math.
  */
 export interface RecipeIngredientLine {
+  id?: string;
   name: string;
   quantity?: number;
   unit?: string;
   productId?: string;
+  /** True when the recipe still works without this ingredient — never affects availability/cost math, display-only. */
+  optional?: boolean;
+  notes?: string;
 }
 
 export interface Recipe {
@@ -61,6 +68,8 @@ export interface Recipe {
   ingredientLines?: RecipeIngredientLine[];
   /** Optional, manually set. Absent means "no known equipment requirement" — never treated as a conflict. */
   equipment?: CookingEquipment[];
+  /** Free-text notes/tips shown in Preparation, separate from the ordered instructions. */
+  notes?: string;
   isFavorite: boolean;
   createdAt: number;
 }
@@ -71,7 +80,27 @@ export type NewRecipe = Pick<Recipe, 'name' | 'mealType' | 'categories' | 'ingre
   nutrition?: NutritionInfo;
   servings?: number;
   ingredientLines?: RecipeIngredientLine[];
+  equipment?: CookingEquipment[];
+  notes?: string;
 };
+
+export type RecipeUpdate = Partial<
+  Pick<
+    Recipe,
+    | 'name'
+    | 'mealType'
+    | 'categories'
+    | 'ingredients'
+    | 'instructions'
+    | 'effort'
+    | 'time'
+    | 'servings'
+    | 'nutrition'
+    | 'ingredientLines'
+    | 'equipment'
+    | 'notes'
+  >
+>;
 
 /** Shape of a starter database entry — everything except the runtime-only fields. */
 export type MealSeed = Omit<Recipe, 'isFavorite' | 'createdAt'>;

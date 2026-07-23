@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { MEAL_SEED } from '@/constants/mealSeed';
 import { recipeStorageService } from '@/services/recipes/recipeStorageService';
-import type { NewRecipe, Recipe } from '@/types/recipe';
+import type { NewRecipe, Recipe, RecipeUpdate } from '@/types/recipe';
 import { generateId } from '@/utils/id';
 
 export function useRecipes() {
@@ -44,17 +44,32 @@ export function useRecipes() {
       servings: input.servings,
       nutrition: input.nutrition,
       ingredientLines: input.ingredientLines,
+      equipment: input.equipment,
+      notes: input.notes?.trim() || undefined,
       isFavorite: false,
       createdAt: Date.now(),
     };
 
     setRecipes((current) => [...current, recipe]);
     await recipeStorageService.add(recipe);
+    return recipe;
   }, []);
 
   const removeRecipe = useCallback(async (id: string) => {
     setRecipes((current) => current.filter((recipe) => recipe.id !== id));
     await recipeStorageService.remove(id);
+  }, []);
+
+  /** Full edit save — preserves id/createdAt/isFavorite/safe-status (the latter two live outside Recipe) and any field not included in the patch. */
+  const updateRecipe = useCallback(async (id: string, patch: RecipeUpdate) => {
+    setRecipes((current) => current.map((recipe) => (recipe.id === id ? { ...recipe, ...patch } : recipe)));
+    await recipeStorageService.update(id, patch);
+  }, []);
+
+  /** Re-inserts an exact recipe snapshot (same id, same every field) — the undo half of delete. */
+  const restoreRecipe = useCallback(async (recipe: Recipe) => {
+    setRecipes((current) => (current.some((existing) => existing.id === recipe.id) ? current : [...current, recipe]));
+    await recipeStorageService.add(recipe);
   }, []);
 
   const toggleFavorite = useCallback(async (id: string) => {
@@ -69,5 +84,5 @@ export function useRecipes() {
     await recipeStorageService.update(id, { isFavorite: nextValue });
   }, []);
 
-  return { recipes, isLoading, addRecipe, removeRecipe, toggleFavorite };
+  return { recipes, isLoading, addRecipe, removeRecipe, updateRecipe, restoreRecipe, toggleFavorite };
 }

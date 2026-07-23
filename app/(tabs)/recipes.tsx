@@ -4,7 +4,6 @@ import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/Button';
 
-import { AddRecipeForm } from '@/components/recipes/AddRecipeForm';
 import { RecipeListItem } from '@/components/recipes/RecipeListItem';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -13,7 +12,6 @@ import { colors, spacing, typography } from '@/constants/theme';
 import { useDiet } from '@/hooks/useDiet';
 import { useInventory } from '@/hooks/useInventory';
 import { useProducts } from '@/hooks/useProducts';
-import { useProfile } from '@/hooks/useProfile';
 import { useRecipes } from '@/hooks/useRecipes';
 import { useSafeMeals } from '@/hooks/useSafeMeals';
 import { useTolerance } from '@/hooks/useTolerance';
@@ -22,15 +20,13 @@ import { findUnmetDiets } from '@/utils/matchDiet';
 import { findFlaggedTolerances } from '@/utils/matchTolerance';
 
 export default function RecipesScreen() {
-  const { recipes, isLoading, addRecipe, removeRecipe, toggleFavorite } = useRecipes();
+  const { recipes, isLoading, toggleFavorite } = useRecipes();
   const { products } = useProducts();
   const { items: inventoryItems } = useInventory();
   const { profile: toleranceProfile } = useTolerance();
   const { profile: dietProfile } = useDiet();
   const { profile: safeMealsProfile, isSafeMeal, toggleSafeMeal, setShowSafeOnly } = useSafeMeals();
-  const { profile: userProfile, hiddenNutrients, budgetPreferences } = useProfile();
   const router = useRouter();
-  const [showAddForm, setShowAddForm] = useState(false);
 
   const visibleRecipes = useMemo(() => {
     return recipes.filter((recipe) => {
@@ -60,26 +56,16 @@ export default function RecipesScreen() {
         />
       </View>
       <View style={styles.addAction}>
-        <Button label={showAddForm ? 'Close' : 'Add recipe'} variant={showAddForm ? 'secondary' : 'primary'} onPress={() => setShowAddForm(!showAddForm)} />
+        <Button label="Add recipe" onPress={() => router.push('/recipe/new')} />
       </View>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {showAddForm && (
-          <AddRecipeForm
-            onSubmit={(recipe) => {
-              addRecipe(recipe);
-              setShowAddForm(false);
-            }}
-            onCancel={() => setShowAddForm(false)}
-            nutritionTrackingEnabled={userProfile?.nutritionTrackingEnabled ?? false}
-            budgetModeEnabled={budgetPreferences.enabled}
-          />
-        )}
-
         {!isLoading && recipes.length === 0 ? (
           <EmptyState
             icon="book-outline"
             title="No recipes yet"
-            description="Add your first recipe using the form above."
+            description="Add your first recipe to get started."
+            actionLabel="Add recipe"
+            onAction={() => router.push('/recipe/new')}
           />
         ) : !isLoading && visibleRecipes.length === 0 ? (
           <EmptyState
@@ -94,17 +80,13 @@ export default function RecipesScreen() {
                 key={recipe.id}
                 recipe={recipe}
                 availability={calculateRecipeAvailability(recipe.ingredients, products, inventoryItems)}
-                flaggedTolerances={findFlaggedTolerances(recipe.ingredients, toleranceProfile)}
-                unmetDiets={findUnmetDiets(recipe.categories, dietProfile)}
+                hasSafetyConflict={
+                  findFlaggedTolerances(recipe.ingredients, toleranceProfile).length > 0 || findUnmetDiets(recipe.categories, dietProfile).length > 0
+                }
                 isSafeMeal={isSafeMeal(recipe.id)}
-                showNutrition={userProfile?.nutritionTrackingEnabled ?? false}
-                hiddenNutrients={hiddenNutrients}
-                budgetModeEnabled={budgetPreferences.enabled}
-                products={products}
-                inventoryItems={inventoryItems}
+                onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: recipe.id } })}
                 onToggleFavorite={toggleFavorite}
                 onToggleSafeMeal={toggleSafeMeal}
-                onRemove={removeRecipe}
               />
             ))}
           </View>

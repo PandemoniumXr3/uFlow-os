@@ -29,7 +29,12 @@ export function Chip({ label, selected, onPress, icon }: ChipProps) {
 
   return (
     <Animated.View style={[styles.base, animatedStyle]}>
-      <Pressable onPress={onPress} style={({ pressed }) => [styles.pressableContent, pressed && styles.pressed]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityState={{ selected: !!selected }}
+        accessibilityLabel={label}
+        style={({ pressed }) => [styles.pressableContent, pressed && styles.pressed]}>
         {icon ? <Ionicons name={icon} size={iconSize.sm} color={selected ? colors.accentBlue : colors.textTertiary} /> : null}
         <Text style={[styles.label, selected && styles.labelSelected]}>{label}</Text>
       </Pressable>
