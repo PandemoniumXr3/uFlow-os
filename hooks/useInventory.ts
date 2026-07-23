@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { inventoryStorageService } from '@/services/inventory/inventoryStorageService';
 import type { InventoryItem, StockStatus, StorageLocation } from '@/types/inventory';
@@ -31,12 +32,21 @@ export function useInventory() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    inventoryStorageService.getAll().then((stored) => {
+  const refetch = useCallback(() => {
+    return inventoryStorageService.getAll().then((stored) => {
       setItems(stored);
       setIsLoading(false);
     });
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so navigating away and back — e.g. removing demo
+  // data from Settings, then returning to Today — always shows current data. `refetch` (returned
+  // below) covers the other gap: writes from an already-focused screen where no navigation occurs.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const addItem = useCallback(
     async (productId: string, initial: NewInventoryItem = {}) => {
@@ -115,5 +125,6 @@ export function useInventory() {
     setQuantity,
     setPriceInfo,
     getForProduct,
+    refetch,
   };
 }

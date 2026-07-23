@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { mealPlanStorageService } from '@/services/mealPlan/mealPlanStorageService';
 import type { NewPlannedMeal, PlannedMeal, PlannedMealUpdate } from '@/types/mealPlan';
@@ -19,12 +20,21 @@ export function useMealPlan() {
   const [entries, setEntries] = useState<PlannedMeal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    mealPlanStorageService.getAll().then((stored) => {
+  const refetch = useCallback(() => {
+    return mealPlanStorageService.getAll().then((stored) => {
       setEntries(stored);
       setIsLoading(false);
     });
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so navigating away and back — e.g. removing demo
+  // data from Settings, then returning to Today — always shows current data. `refetch` (returned
+  // below) covers the other gap: writes from an already-focused screen where no navigation occurs.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const weekRange = useMemo(() => getWeekRange(), []);
   const todayKey = getTodayKey();
@@ -205,5 +215,6 @@ export function useMealPlan() {
     addCustomMeal,
     toggleSkipped,
     clearFuturePlannedMeals,
+    refetch,
   };
 }

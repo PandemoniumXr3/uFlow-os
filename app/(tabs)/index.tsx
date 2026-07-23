@@ -2,6 +2,8 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
+import { DemoDataBanner } from '@/components/today/DemoDataBanner';
+import { GetStartedCard } from '@/components/today/GetStartedCard';
 import { MealSuggestions } from '@/components/today/MealSuggestions';
 import { NutritionSummary } from '@/components/today/NutritionSummary';
 import { QuickContextBar } from '@/components/today/QuickContextBar';
@@ -10,6 +12,7 @@ import { TodayTimeline } from '@/components/today/TodayTimeline';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Screen } from '@/components/ui/Screen';
 import { spacing } from '@/constants/theme';
+import { useDemoData } from '@/hooks/useDemoData';
 import { useFoodContext } from '@/hooks/useFoodContext';
 import { useInventory } from '@/hooks/useInventory';
 import { useMealLog } from '@/hooks/useMealLog';
@@ -39,14 +42,15 @@ export default function TodayScreen() {
   // Lifted here so every section of Today (suggestions, timeline, nutrition,
   // alerts) observes the exact same live state instead of each owning a
   // separate hook instance that misses the others' writes.
-  const { recipes } = useRecipes();
-  const { products, isLoading: productsLoading } = useProducts();
-  const { items: inventoryItems } = useInventory();
+  const { recipes, refetch: refetchRecipes } = useRecipes();
+  const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
+  const { items: inventoryItems, refetch: refetchInventory } = useInventory();
   const { alwaysInStockIds } = useProductPreferences(products, productsLoading);
   const mealLog = useMealLog();
   const mealPlan = useMealPlan();
-  const { profile, hiddenNutrients, budgetPreferences } = useProfile();
+  const { profile, hiddenNutrients, budgetPreferences, contextIntelligenceEnabled } = useProfile();
   const { profile: safeMealsProfile, safeMealIds, isSafeMeal, setShowSafeOnly } = useSafeMeals();
+  const demoData = useDemoData();
   const [budgetFilter, setBudgetFilter] = useState<BudgetSuggestionFilter | null>(null);
 
   const isLoading = contextLoading || mealLog.isLoading || mealPlan.isLoading;
@@ -65,23 +69,36 @@ export default function TodayScreen() {
     return base;
   }, [context, budgetPreferences, budgetFilter]);
 
+  // demoDataService writes go straight to storage, bypassing each hook's own React state — a
+  // refetch is the only way this already-mounted screen learns about them without navigating away.
+  async function handleUseDemoSetup() {
+    await demoData.install();
+    await Promise.all([refetchInventory(), refetchRecipes(), refetchProducts(), mealPlan.refetch()]);
+  }
+
   return (
     <Screen>
       {isLoading ? null : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <PageHeader scale="display" title={getGreeting()} subtitle="Let's make food easier today." onSettingsPress={() => router.push('/settings')} />
 
-          <QuickContextBar
-            context={context}
-            onToggle={toggleAnswer}
-            safeMealsOnly={safeMealsProfile.showSafeOnly}
-            onToggleSafeMealsOnly={() => setShowSafeOnly(!safeMealsProfile.showSafeOnly)}
-            onReset={resetContext}
-            budgetModeEnabled={budgetPreferences.enabled}
-            budgetFilter={budgetFilter}
-            onSelectBudgetFilter={setBudgetFilter}
-            weeklyBudgetSet={budgetPreferences.weeklyBudgetCents != null}
-          />
+          {demoData.isInstalled && <DemoDataBanner />}
+
+          {inventoryItems.length === 0 && <GetStartedCard onUseDemoSetup={handleUseDemoSetup} />}
+
+          {contextIntelligenceEnabled && (
+            <QuickContextBar
+              context={context}
+              onToggle={toggleAnswer}
+              safeMealsOnly={safeMealsProfile.showSafeOnly}
+              onToggleSafeMealsOnly={() => setShowSafeOnly(!safeMealsProfile.showSafeOnly)}
+              onReset={resetContext}
+              budgetModeEnabled={budgetPreferences.enabled}
+              budgetFilter={budgetFilter}
+              onSelectBudgetFilter={setBudgetFilter}
+              weeklyBudgetSet={budgetPreferences.weeklyBudgetCents != null}
+            />
+          )}
 
           <SmartAlerts
             products={products}

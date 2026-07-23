@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { DEFAULT_PRODUCTS } from '@/constants/productSeed';
 import { productStorageService } from '@/services/products/productStorageService';
@@ -10,35 +11,43 @@ export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    productStorageService.getAll().then(async (stored) => {
-      if (stored.length > 0) {
-        setProducts(stored);
-        setIsLoading(false);
-        return;
-      }
-
-      const seeded = DEFAULT_PRODUCTS.map((item) => ({
-        id: generateId(),
-        name: item.name,
-        category: item.category,
-        isFavorite: false,
-        createdAt: Date.now(),
-      }));
-      const result = await productStorageService.seedIfEmpty(seeded);
-      setProducts(result);
+  const refetch = useCallback(async () => {
+    const stored = await productStorageService.getAll();
+    if (stored.length > 0) {
+      setProducts(stored);
       setIsLoading(false);
-    });
+      return;
+    }
+
+    const seeded = DEFAULT_PRODUCTS.map((item) => ({
+      id: generateId(),
+      name: item.name,
+      category: item.category,
+      isFavorite: false,
+      createdAt: Date.now(),
+    }));
+    const result = await productStorageService.seedIfEmpty(seeded);
+    setProducts(result);
+    setIsLoading(false);
   }, []);
 
+  // useFocusEffect (not a plain mount-only effect) so navigating away and back always shows current
+  // data. `refetch` (returned below) covers writes from an already-focused screen — e.g. installing
+  // demo data from Today, which creates new Products directly in storage, bypassing this state.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
+
   const addProduct = useCallback(
-    async (input: NewProduct) => {
+    async (input: NewProduct): Promise<Product | undefined> => {
       const name = input.name.trim();
-      if (!name) return;
+      if (!name) return undefined;
 
       const normalized = normalizeIngredient(name);
-      const alreadyOwned = products.some((product) => normalizeIngredient(product.name) === normalized);
-      if (alreadyOwned) return;
+      const existing = products.find((product) => normalizeIngredient(product.name) === normalized);
+      if (existing) return existing;
 
       const product: Product = {
         id: generateId(),
@@ -50,6 +59,7 @@ export function useProducts() {
 
       setProducts((current) => [...current, product]);
       await productStorageService.add(product);
+      return product;
     },
     [products]
   );
@@ -71,5 +81,5 @@ export function useProducts() {
     await productStorageService.update(id, { isFavorite: nextValue });
   }, []);
 
-  return { products, isLoading, addProduct, removeProduct, toggleFavorite };
+  return { products, isLoading, addProduct, removeProduct, toggleFavorite, refetch };
 }
