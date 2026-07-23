@@ -111,7 +111,11 @@ export function RecipeIngredientEditor({ lines, products, onChange }: RecipeIngr
               <View style={styles.linkedRow}>
                 <Ionicons name="link" size={iconSize.sm} color={colors.accentBlue} />
                 <Text style={styles.linkedText}>Linked to {linkedProduct.name}</Text>
-                <Pressable onPress={() => updateLine(line.id!, { productId: undefined })} hitSlop={8}>
+                <Pressable
+                  onPress={() => updateLine(line.id!, { productId: undefined })}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Unlink ${linkedProduct.name}`}>
                   <Text style={styles.unlinkText}>Unlink</Text>
                 </Pressable>
               </View>

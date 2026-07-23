@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -18,6 +17,7 @@ import { CollapsibleSection } from '@/components/ui/CollapsibleSection';
 import { Screen } from '@/components/ui/Screen';
 import { MEAL_TYPE_OPTIONS } from '@/constants/mealOptions';
 import { colors, radius, shadow, spacing, typography } from '@/constants/theme';
+import { useUndo } from '@/contexts/UndoContext';
 import { useDiet } from '@/hooks/useDiet';
 import { useDismissals } from '@/hooks/useDismissals';
 import { useInventory } from '@/hooks/useInventory';
@@ -30,7 +30,7 @@ import { useRecipes } from '@/hooks/useRecipes';
 import { useSafeMeals } from '@/hooks/useSafeMeals';
 import { useShoppingList } from '@/hooks/useShoppingList';
 import { useTolerance } from '@/hooks/useTolerance';
-import type { MealType, Recipe } from '@/types/recipe';
+import type { MealType } from '@/types/recipe';
 import { calculateRecipeAvailability } from '@/utils/calculateRecipeAvailability';
 import { evaluateIngredientCoverage } from '@/utils/evaluateIngredientCoverage';
 import { countRecipeReferences } from '@/utils/countRecipeReferences';
@@ -55,6 +55,7 @@ export default function RecipeDetailScreen() {
   const { permanentlyHiddenIds } = useDismissals();
   const mealPlan = useMealPlan();
   const mealLog = useMealLog();
+  const { scheduleUndo } = useUndo();
   const shoppingList = useShoppingList({
     recipes,
     products,
@@ -77,7 +78,6 @@ export default function RecipeDetailScreen() {
   const [planSlot, setPlanSlot] = useState<MealType | undefined>(undefined);
   const [planDayOffset, setPlanDayOffset] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deletedSnapshot, setDeletedSnapshot] = useState<Recipe | undefined>(undefined);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -152,35 +152,23 @@ export default function RecipeDetailScreen() {
     if (added > 0) showToast(`Added ${added} item${added === 1 ? '' : 's'} to Grocery`);
   }
 
-  function handleDeleteConfirm() {
+  async function handleDeleteConfirm() {
     if (!recipe) return;
-    setDeletedSnapshot(recipe);
-    removeRecipe(recipe.id);
+    const snapshot = recipe;
+    // Awaited so the storage write lands before navigating back — otherwise the Recipes list's own
+    // useRecipes() instance can refetch-on-focus before the delete has actually persisted, and
+    // briefly show the "deleted" recipe as still there.
+    await removeRecipe(snapshot.id);
     setConfirmDelete(false);
-  }
-
-  function handleUndoDelete() {
-    if (!deletedSnapshot) return;
-    restoreRecipe(deletedSnapshot);
-    setDeletedSnapshot(undefined);
+    scheduleUndo({
+      id: snapshot.id,
+      message: `"${snapshot.name}" deleted`,
+      restore: () => restoreRecipe(snapshot),
+    });
+    router.back();
   }
 
   if (recipesLoading) return <Screen />;
-
-  if (deletedSnapshot) {
-    return (
-      <Screen>
-        <View style={styles.deletedContainer}>
-          <Ionicons name="checkmark-circle-outline" size={40} color={colors.accentGreen} />
-          <Text style={styles.deletedTitle}>"{deletedSnapshot.name}" deleted</Text>
-          <View style={styles.deletedActions}>
-            <Button label="Undo" onPress={handleUndoDelete} />
-            <Button label="Back to Recipes" variant="quiet" onPress={() => router.back()} />
-          </View>
-        </View>
-      </Screen>
-    );
-  }
 
   if (!recipe) {
     return (
@@ -358,22 +346,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xl,
-  },
-  deletedContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-  },
-  deletedTitle: {
-    ...typography.role.sectionHeading,
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  deletedActions: {
-    gap: spacing.sm,
-    width: '100%',
   },
   toast: {
     position: 'absolute',

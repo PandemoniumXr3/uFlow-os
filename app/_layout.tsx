@@ -4,7 +4,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import { UndoBanner } from '@/components/ui/UndoBanner';
 import { colors } from '@/constants/theme';
+import { UndoProvider } from '@/contexts/UndoContext';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -45,9 +47,12 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={navigationTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-      </Stack>
+      <UndoProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+        <UndoBanner />
+      </UndoProvider>
     </ThemeProvider>
   );
 }

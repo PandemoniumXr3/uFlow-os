@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { MEAL_SEED } from '@/constants/mealSeed';
 import { recipeStorageService } from '@/services/recipes/recipeStorageService';
@@ -9,24 +10,40 @@ export function useRecipes() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    recipeStorageService.getAll().then(async (stored) => {
-      if (stored.length > 0) {
-        setRecipes(stored);
-        setIsLoading(false);
-        return;
-      }
+  // Each screen holds its own useRecipes() instance rather than sharing one global store, and
+  // React Navigation keeps a screen mounted (not remounted) when you navigate back to it — so
+  // without this, deleting/editing a recipe from Detail and returning to the Recipes list would
+  // show stale data until the app fully reloads. useFocusEffect re-fetches on every focus,
+  // including the initial mount, so a plain useEffect isn't needed alongside it.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-      const seeded = MEAL_SEED.map((meal) => ({
-        ...meal,
-        isFavorite: false,
-        createdAt: Date.now(),
-      }));
-      const result = await recipeStorageService.seedIfEmpty(seeded);
-      setRecipes(result);
-      setIsLoading(false);
-    });
-  }, []);
+      recipeStorageService.getAll().then(async (stored) => {
+        if (cancelled) return;
+        if (stored.length > 0) {
+          setRecipes(stored);
+          setIsLoading(false);
+          return;
+        }
+
+        const seeded = MEAL_SEED.map((meal) => ({
+          ...meal,
+          isFavorite: false,
+          createdAt: Date.now(),
+        }));
+        const result = await recipeStorageService.seedIfEmpty(seeded);
+        if (!cancelled) {
+          setRecipes(result);
+          setIsLoading(false);
+        }
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [])
+  );
 
   const addRecipe = useCallback(async (input: NewRecipe) => {
     const name = input.name.trim();
