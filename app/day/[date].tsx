@@ -33,7 +33,8 @@ import { estimateExtraPurchaseCost } from '@/services/budget/estimateExtraPurcha
 import { estimateMealPlanCost } from '@/services/budget/estimateMealPlanCost';
 import { buildDecisionContext } from '@/services/decision/buildDecisionContext';
 import { getRankedMealSuggestions } from '@/services/decision/getRankedMealSuggestions';
-import { applyStockDeduction, estimateStockDeduction, type StockDeductionLine } from '@/services/stock/estimateStockDeduction';
+import { handleMealEaten } from '@/services/automation/handleMealEaten';
+import { applyStockDeduction, type StockDeductionLine } from '@/services/stock/estimateStockDeduction';
 import type { CostEstimate } from '@/types/budget';
 import type { PlannedMeal } from '@/types/mealPlan';
 import type { Recipe } from '@/types/recipe';
@@ -185,33 +186,43 @@ export default function DayDetailScreen() {
   const ideas = ideasResult?.suggestions ?? [];
 
   function markEaten(meal: PlannedMeal) {
+    const recipe = meal.recipeId ? recipeById.get(meal.recipeId) : undefined;
+    const result = handleMealEaten({
+      meal,
+      recipe,
+      products,
+      inventoryItems,
+      alwaysInStockProductIds: alwaysInStockIds,
+      mealLogEntries: mealLog.entries,
+    });
+
+    // Guards a double-tap (e.g. tapping "Mark eaten" twice before the sheet closes) from logging the same meal twice.
+    if (result.alreadyLogged || !result.logInput) return;
+
     if (meal.isCustom) {
       // Custom meals never have structured ingredients, so there is nothing to deduct — never guessed.
       mealLog.logCustomMeal({
-        customName: meal.customName ?? 'Custom meal',
-        date: dateKey,
-        plannedMealId: meal.id,
-        mealSlot: meal.mealSlot,
-        servings: meal.servings,
-        nutritionSnapshot: meal.customNutrition,
+        customName: result.logInput.customName ?? 'Custom meal',
+        date: result.logInput.date,
+        plannedMealId: result.logInput.plannedMealId,
+        mealSlot: result.logInput.mealSlot,
+        servings: result.logInput.servings,
+        nutritionSnapshot: result.logInput.nutritionSnapshot,
       });
       return;
     }
+
     if (!meal.recipeId) return;
-    const recipe = recipeById.get(meal.recipeId);
     mealLog.logMeal(meal.recipeId, {
-      date: dateKey,
-      plannedMealId: meal.id,
-      mealSlot: meal.mealSlot,
-      servings: meal.servings,
-      nutritionSnapshot: recipe?.nutrition,
+      date: result.logInput.date,
+      plannedMealId: result.logInput.plannedMealId,
+      mealSlot: result.logInput.mealSlot,
+      servings: result.logInput.servings,
+      nutritionSnapshot: result.logInput.nutritionSnapshot,
     });
 
-    if (recipe) {
-      const lines = estimateStockDeduction(recipe, meal.servings ?? 1, products, inventoryItems, alwaysInStockIds);
-      if (lines.length > 0) {
-        setPendingDeduction({ recipeName: recipe.name, lines, excludedIds: new Set() });
-      }
+    if (recipe && result.deductionLines.length > 0) {
+      setPendingDeduction({ recipeName: recipe.name, lines: result.deductionLines, excludedIds: new Set() });
     }
   }
 

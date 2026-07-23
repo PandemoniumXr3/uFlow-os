@@ -24,7 +24,7 @@ import { useRecipes } from '@/hooks/useRecipes';
 import { useShoppingList } from '@/hooks/useShoppingList';
 import type { ShoppingItem } from '@/types/shoppingItem';
 import { formatCents, parseToCents } from '@/utils/money';
-import { resolveStockActionForPurchase } from '@/utils/resolveStockActionForPurchase';
+import { handleGroceryPurchased } from '@/services/automation/handleGroceryPurchased';
 
 export default function GroceryScreen() {
   const { products, isLoading: productsLoading } = useProducts();
@@ -92,10 +92,8 @@ export default function GroceryScreen() {
       return;
     }
 
-    const existingInventoryItem = inventoryItems.find((inv) => inv.productId === item.productId);
-    const action = resolveStockActionForPurchase(item, existingInventoryItem);
-
-    if (action.type === 'none') {
+    const { stockAction } = handleGroceryPurchased({ item, inventoryItems });
+    if (stockAction.type === 'none') {
       setChecked(item, true);
       return;
     }
@@ -106,21 +104,27 @@ export default function GroceryScreen() {
   async function confirmStockUpdate() {
     if (!pendingPurchase) return;
     const purchasedItem = pendingPurchase;
-    const existingInventoryItem = inventoryItems.find((inv) => inv.productId === purchasedItem.productId);
-    const action = resolveStockActionForPurchase(purchasedItem, existingInventoryItem);
+    // No price yet — that's offered as a separate, skippable step below, so priceCents is omitted here.
+    const { alreadyPurchased, stockAction } = handleGroceryPurchased({ item: purchasedItem, inventoryItems });
+
+    // Guards a double-tap (confirming the same purchase twice before the sheet closes) from writing to Stock twice.
+    if (alreadyPurchased) {
+      setPendingPurchase(null);
+      return;
+    }
 
     let inventoryItemId: string | undefined;
-    if (action.type === 'create') {
-      const created = await addItem(action.newItem.productId, {
-        stockStatus: action.newItem.stockStatus,
-        location: action.newItem.location,
-        quantity: action.newItem.quantity,
-        unit: action.newItem.unit,
+    if (stockAction.type === 'create') {
+      const created = await addItem(stockAction.newItem.productId, {
+        stockStatus: stockAction.newItem.stockStatus,
+        location: stockAction.newItem.location,
+        quantity: stockAction.newItem.quantity,
+        unit: stockAction.newItem.unit,
       });
       inventoryItemId = created.id;
-    } else if (action.type === 'update') {
-      await update(action.inventoryItemId, action.patch);
-      inventoryItemId = action.inventoryItemId;
+    } else if (stockAction.type === 'update') {
+      await update(stockAction.inventoryItemId, stockAction.patch);
+      inventoryItemId = stockAction.inventoryItemId;
     }
 
     setChecked(purchasedItem, true);
