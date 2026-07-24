@@ -13,10 +13,16 @@ import { TextField } from '@/components/ui/TextField';
 import { enterFade, exitFade, layoutTransition } from '@/constants/motion';
 import { NUTRIENT_OPTIONS } from '@/constants/nutritionOptions';
 import { colors, iconSize, spacing, typography } from '@/constants/theme';
+import { useUndo } from '@/contexts/UndoContext';
+import { useBackup, type ExportPreviewCounts } from '@/hooks/useBackup';
 import { useDemoData } from '@/hooks/useDemoData';
 import { useDismissals } from '@/hooks/useDismissals';
 import { useProfile } from '@/hooks/useProfile';
 import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference';
+import { inventoryStorageService } from '@/services/inventory/inventoryStorageService';
+import { mealLogStorageService } from '@/services/mealLog/mealLogStorageService';
+import { mealPlanStorageService } from '@/services/mealPlan/mealPlanStorageService';
+import { shoppingStorageService } from '@/services/shopping/shoppingStorageService';
 import { asyncStorageClient } from '@/services/storage/asyncStorageClient';
 import { formatCents, parseToCents } from '@/utils/money';
 
@@ -44,13 +50,15 @@ export default function SettingsScreen() {
     contextIntelligenceEnabled,
     setContextIntelligenceEnabled,
     rerunOnboarding,
+    reloadProfile,
   } = useProfile();
   const demoData = useDemoData();
+  const backup = useBackup();
+  const { scheduleUndo } = useUndo();
   const reducedMotion = useReducedMotionPreference();
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const { clearHistory } = useDismissals();
   const [confirmClear, setConfirmClear] = useState(false);
-  const [cleared, setCleared] = useState(false);
   const [confirmClearSuggestions, setConfirmClearSuggestions] = useState(false);
   const [suggestionsCleared, setSuggestionsCleared] = useState(false);
   const nutritionEnabled = profile?.nutritionTrackingEnabled ?? false;
@@ -58,6 +66,16 @@ export default function SettingsScreen() {
   const [weeklyBudgetInput, setWeeklyBudgetInput] = useState('');
   const [maxMealCostInput, setMaxMealCostInput] = useState('');
   const [defaultStoreInput, setDefaultStoreInput] = useState('');
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportPreview, setExportPreview] = useState<ExportPreviewCounts | null>(null);
+  const [exportNote, setExportNote] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
+  const [confirmClearGrocery, setConfirmClearGrocery] = useState(false);
+  const [confirmClearStock, setConfirmClearStock] = useState(false);
+  const [confirmClearMealPlan, setConfirmClearMealPlan] = useState(false);
 
   useEffect(() => {
     setWeeklyBudgetInput(budgetPreferences.weeklyBudgetCents != null ? String(budgetPreferences.weeklyBudgetCents / 100) : '');
@@ -68,7 +86,10 @@ export default function SettingsScreen() {
   async function handleClearAllData() {
     await asyncStorageClient.clearAll();
     setConfirmClear(false);
-    setCleared(true);
+    // Re-creates a fresh profile (onboarding: not_started) so the root layout's own routing redirects
+    // to onboarding automatically — the app behaves like a genuine fresh install, no manual restart needed.
+    await reloadProfile();
+    router.replace('/');
   }
 
   async function handleClearSuggestionHistory() {
@@ -80,6 +101,60 @@ export default function SettingsScreen() {
   function handleRerunOnboarding() {
     rerunOnboarding();
     router.push('/onboarding');
+  }
+
+  async function handleToggleExport() {
+    const next = !exportOpen;
+    setExportOpen(next);
+    setExportNote(null);
+    if (next && !exportPreview) {
+      setExportPreview(await backup.getExportPreview());
+    }
+  }
+
+  async function handleExport(excludeDemoData: boolean) {
+    setExporting(true);
+    setExportNote(null);
+    const result = await backup.exportData(excludeDemoData);
+    setExporting(false);
+    if (!result.success) {
+      setExportNote(`Export failed: ${result.error ?? 'unknown error'}.`);
+      return;
+    }
+    const methodLabel = result.method === 'download' ? 'Downloaded.' : result.method === 'share' ? 'Ready to share.' : 'Copied to clipboard (share sheet was unavailable).';
+    setExportNote(methodLabel);
+  }
+
+  async function handleClearMealHistory() {
+    const snapshot = await mealLogStorageService.getAll();
+    await mealLogStorageService.save([]);
+    setConfirmClearHistory(false);
+    scheduleUndo({ id: 'clear-meal-history', message: 'Meal history cleared', restore: () => mealLogStorageService.save(snapshot) });
+  }
+
+  async function handleClearGrocery() {
+    const [manualSnapshot, overlaySnapshot] = await Promise.all([shoppingStorageService.getManualItems(), shoppingStorageService.getOverlay()]);
+    await Promise.all([shoppingStorageService.saveManualItems([]), shoppingStorageService.saveOverlay({})]);
+    setConfirmClearGrocery(false);
+    scheduleUndo({
+      id: 'clear-grocery',
+      message: 'Grocery list cleared',
+      restore: () => Promise.all([shoppingStorageService.saveManualItems(manualSnapshot), shoppingStorageService.saveOverlay(overlaySnapshot)]).then(() => undefined),
+    });
+  }
+
+  async function handleClearStock() {
+    const snapshot = await inventoryStorageService.getAll();
+    await inventoryStorageService.save([]);
+    setConfirmClearStock(false);
+    scheduleUndo({ id: 'clear-stock', message: 'Stock cleared', restore: () => inventoryStorageService.save(snapshot) });
+  }
+
+  async function handleClearMealPlan() {
+    const snapshot = await mealPlanStorageService.getAll();
+    await mealPlanStorageService.save([]);
+    setConfirmClearMealPlan(false);
+    scheduleUndo({ id: 'clear-meal-plan', message: 'Meal plan cleared', restore: () => mealPlanStorageService.save(snapshot) });
   }
 
   return (
@@ -121,24 +196,6 @@ export default function SettingsScreen() {
                 thumbColor={contextIntelligenceEnabled ? colors.accentBlue : colors.textTertiary}
               />
             </View>
-
-            {demoData.isLoading ? null : demoData.isInstalled ? (
-              <Pressable style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]} onPress={() => demoData.remove()}>
-                <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
-                <View style={styles.rowText}>
-                  <Text style={[styles.rowLabel, styles.destructiveLabel]}>Remove demo data</Text>
-                  <Text style={styles.rowDescription}>Removes only the demo Stock, recipes, and plan. Your own data is unaffected.</Text>
-                </View>
-              </Pressable>
-            ) : (
-              <Pressable style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]} onPress={() => demoData.install()}>
-                <Ionicons name="sparkles-outline" size={iconSize.md} color={colors.accentBlue} />
-                <View style={styles.rowText}>
-                  <Text style={styles.rowLabel}>Install demo data</Text>
-                  <Text style={styles.rowDescription}>See a working example — Stock, a planned meal, and Grocery.</Text>
-                </View>
-              </Pressable>
-            )}
           </Card>
         </View>
 
@@ -296,25 +353,217 @@ export default function SettingsScreen() {
         )}
 
         <View style={styles.section}>
-          <SectionHeader title="Data and privacy" />
+          <SectionHeader title="Backup" />
           <Card variant="standard" style={styles.groupCard}>
-            <Pressable style={({ pressed }) => [styles.row, pressed && styles.rowPressed]} onPress={() => setConfirmClearSuggestions(true)}>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={handleToggleExport}
+              accessibilityRole="button"
+              accessibilityLabel="Export data"
+              accessibilityState={{ expanded: exportOpen }}>
+              <Ionicons name="download-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Export data</Text>
+                <Text style={styles.rowDescription}>{backup.status.lastExportAt ? `Last export ${new Date(backup.status.lastExportAt).toLocaleDateString()}` : 'Save a local backup of your data.'}</Text>
+              </View>
+              <Ionicons name={exportOpen ? 'chevron-up' : 'chevron-down'} size={iconSize.sm} color={colors.textTertiary} />
+            </Pressable>
+
+            {exportOpen && (
+              <Animated.View style={[styles.exportSection, styles.rowDivider]} entering={enterFade(reducedMotion)} exiting={exitFade(reducedMotion)}>
+                {exportPreview ? (
+                  <>
+                    <View style={styles.countGrid}>
+                      <Text style={styles.countText}>{exportPreview.recipes} recipes</Text>
+                      <Text style={styles.countText}>{exportPreview.products} products</Text>
+                      <Text style={styles.countText}>{exportPreview.inventory} Stock items</Text>
+                      <Text style={styles.countText}>{exportPreview.manualGroceryItems} Grocery items</Text>
+                      <Text style={styles.countText}>{exportPreview.mealPlan} planned meals</Text>
+                      <Text style={styles.countText}>{exportPreview.mealHistory} history entries</Text>
+                    </View>
+                    <Text style={styles.rowDescription}>{exportPreview.profileIncluded ? 'Includes your profile.' : 'No profile to include.'}</Text>
+                    {exportPreview.demoDataIncluded && <Text style={styles.rowDescription}>Includes demo data.</Text>}
+                    <Text style={styles.privacyNote}>
+                      This is a plain JSON file, not encrypted. It may contain personal food preferences and meal history — store it somewhere private.
+                    </Text>
+                    <Pressable
+                      style={({ pressed }) => [styles.exportButton, pressed && styles.rowPressed]}
+                      onPress={() => handleExport(false)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Export full backup"
+                      accessibilityState={{ disabled: exporting }}
+                      disabled={exporting}>
+                      <Text style={styles.exportButtonLabel}>Export full backup</Text>
+                    </Pressable>
+                    {exportPreview.demoDataIncluded && (
+                      <Pressable
+                        style={({ pressed }) => [styles.exportButtonSecondary, pressed && styles.rowPressed]}
+                        onPress={() => handleExport(true)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Export excluding demo data"
+                        accessibilityState={{ disabled: exporting }}
+                        disabled={exporting}>
+                        <Text style={styles.exportButtonSecondaryLabel}>Export excluding demo data</Text>
+                      </Pressable>
+                    )}
+                    {exportNote && (
+                      <Text style={styles.clearedNote} accessibilityLiveRegion="polite">
+                        {exportNote}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={styles.rowDescription}>Loading…</Text>
+                )}
+              </Animated.View>
+            )}
+
+            <Pressable
+              style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
+              onPress={() => router.push('/import')}
+              accessibilityRole="button"
+              accessibilityLabel="Import data"
+              accessibilityHint={
+                backup.status.lastImportAt
+                  ? `Last import ${new Date(backup.status.lastImportAt).toLocaleDateString()}${backup.status.lastImportWarningsCount ? `, ${backup.status.lastImportWarningsCount} warning${backup.status.lastImportWarningsCount === 1 ? '' : 's'}` : ''}`
+                  : 'Restore or merge a uFlow backup file, with a preview before anything changes.'
+              }>
+              <Ionicons name="cloud-upload-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Import data</Text>
+                <Text style={styles.rowDescription}>
+                  {backup.status.lastImportAt
+                    ? `Last import ${new Date(backup.status.lastImportAt).toLocaleDateString()}${backup.status.lastImportWarningsCount ? ` · ${backup.status.lastImportWarningsCount} warning${backup.status.lastImportWarningsCount === 1 ? '' : 's'}` : ''}`
+                    : 'Restore or merge a uFlow backup file, with a preview before anything changes.'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={iconSize.sm} color={colors.textTertiary} />
+            </Pressable>
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Demo data" />
+          <Card variant="standard" style={styles.groupCard}>
+            {demoData.isLoading ? null : demoData.isInstalled ? (
+              <Pressable
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                onPress={() => demoData.remove()}
+                accessibilityRole="button"
+                accessibilityLabel="Remove demo data"
+                accessibilityHint="Removes only the demo Stock, recipes, and plan. Your own data is unaffected.">
+                <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowLabel, styles.destructiveLabel]}>Remove demo data</Text>
+                  <Text style={styles.rowDescription}>Removes only the demo Stock, recipes, and plan. Your own data is unaffected.</Text>
+                </View>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                onPress={() => demoData.install()}
+                accessibilityRole="button"
+                accessibilityLabel="Install demo data"
+                accessibilityHint="See a working example — Stock, a planned meal, and Grocery.">
+                <Ionicons name="sparkles-outline" size={iconSize.md} color={colors.accentBlue} />
+                <View style={styles.rowText}>
+                  <Text style={styles.rowLabel}>Install demo data</Text>
+                  <Text style={styles.rowDescription}>See a working example — Stock, a planned meal, and Grocery.</Text>
+                </View>
+              </Pressable>
+            )}
+          </Card>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Suggestions" />
+          <Card variant="standard" style={styles.groupCard}>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={() => setConfirmClearSuggestions(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Reset suggestion history"
+              accessibilityHint='Clears every "not this" and "hide forever" dismissal. Recipes, stock, and plans are unaffected.'>
               <Ionicons name="refresh-outline" size={iconSize.md} color={colors.textSecondary} />
               <View style={styles.rowText}>
                 <Text style={styles.rowLabel}>Reset suggestion history</Text>
-                <Text style={styles.rowDescription}>Clears dismissed and hidden meals. Recipes, stock, and plans are unaffected.</Text>
-              </View>
-            </Pressable>
-            <Pressable style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]} onPress={() => setConfirmClear(true)}>
-              <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
-              <View style={styles.rowText}>
-                <Text style={[styles.rowLabel, styles.destructiveLabel]}>Clear all data</Text>
-                <Text style={styles.rowDescription}>Removes everything stored on this device — recipes, stock, plans, and preferences.</Text>
+                <Text style={styles.rowDescription}>Clears every "not this" and "hide forever" dismissal. Recipes, stock, and plans are unaffected.</Text>
               </View>
             </Pressable>
           </Card>
-          {suggestionsCleared && <Text style={styles.clearedNote}>Suggestion history reset.</Text>}
-          {cleared && <Text style={styles.clearedNote}>Data cleared. Restart uFlow to start fresh.</Text>}
+          {suggestionsCleared && (
+            <Text style={styles.clearedNote} accessibilityLiveRegion="polite">
+              Suggestion history reset.
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Destructive actions" />
+          <Card variant="standard" style={styles.groupCard}>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={() => setConfirmClearHistory(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Clear meal history"
+              accessibilityHint="Removes every logged meal entry. Recipes, Stock, and your plan are unaffected. Undo available briefly after.">
+              <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
+              <View style={styles.rowText}>
+                <Text style={[styles.rowLabel, styles.destructiveLabel]}>Clear meal history</Text>
+                <Text style={styles.rowDescription}>Removes every logged meal entry. Recipes, Stock, and your plan are unaffected. Undo available briefly after.</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
+              onPress={() => setConfirmClearGrocery(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Clear Grocery"
+              accessibilityHint="Removes every manually added Grocery item and resets checked/hidden state on automatic items. Undo available briefly after.">
+              <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
+              <View style={styles.rowText}>
+                <Text style={[styles.rowLabel, styles.destructiveLabel]}>Clear Grocery</Text>
+                <Text style={styles.rowDescription}>Removes every manually added Grocery item and resets checked/hidden state on automatic items. Undo available briefly after.</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
+              onPress={() => setConfirmClearStock(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Clear Stock"
+              accessibilityHint="Removes every Stock item. Products, recipes, and your plan are unaffected. Undo available briefly after.">
+              <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
+              <View style={styles.rowText}>
+                <Text style={[styles.rowLabel, styles.destructiveLabel]}>Clear Stock</Text>
+                <Text style={styles.rowDescription}>Removes every Stock item. Products, recipes, and your plan are unaffected. Undo available briefly after.</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
+              onPress={() => setConfirmClearMealPlan(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Clear meal plan"
+              accessibilityHint="Removes every planned meal on every date. History already logged is unaffected. Undo available briefly after.">
+              <Ionicons name="trash-outline" size={iconSize.md} color={colors.danger} />
+              <View style={styles.rowText}>
+                <Text style={[styles.rowLabel, styles.destructiveLabel]}>Clear meal plan</Text>
+                <Text style={styles.rowDescription}>Removes every planned meal on every date. History already logged is unaffected. Undo available briefly after.</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
+              onPress={() => setConfirmClear(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all data"
+              accessibilityHint="Removes your profile, recipes, Products, Stock, Grocery, Meal Plan, history, preferences, onboarding state, and demo metadata. No undo — export a backup first if unsure.">
+              <Ionicons name="warning-outline" size={iconSize.md} color={colors.danger} />
+              <View style={styles.rowText}>
+                <Text style={[styles.rowLabel, styles.destructiveLabel]}>Clear all data</Text>
+                <Text style={styles.rowDescription}>
+                  Removes your profile, recipes, Products, Stock, Grocery, Meal Plan, history, preferences, onboarding state, and demo metadata. No undo — export a backup first if unsure.
+                </Text>
+              </View>
+            </Pressable>
+          </Card>
         </View>
 
         {profile && (
@@ -343,9 +592,49 @@ export default function SettingsScreen() {
       />
 
       <ConfirmDialog
+        visible={confirmClearHistory}
+        title="Clear meal history?"
+        message="Removes every logged meal entry from your history. Recipes, Stock, and your plan are unaffected. You can undo this right after."
+        confirmLabel="Clear history"
+        destructive
+        onConfirm={handleClearMealHistory}
+        onCancel={() => setConfirmClearHistory(false)}
+      />
+
+      <ConfirmDialog
+        visible={confirmClearGrocery}
+        title="Clear Grocery?"
+        message="Removes every manually added Grocery item and resets checked/hidden state on automatic items. You can undo this right after."
+        confirmLabel="Clear Grocery"
+        destructive
+        onConfirm={handleClearGrocery}
+        onCancel={() => setConfirmClearGrocery(false)}
+      />
+
+      <ConfirmDialog
+        visible={confirmClearStock}
+        title="Clear Stock?"
+        message="Removes every Stock item. Products, recipes, and your plan are unaffected. You can undo this right after."
+        confirmLabel="Clear Stock"
+        destructive
+        onConfirm={handleClearStock}
+        onCancel={() => setConfirmClearStock(false)}
+      />
+
+      <ConfirmDialog
+        visible={confirmClearMealPlan}
+        title="Clear meal plan?"
+        message="Removes every planned meal on every date. History already logged is unaffected. You can undo this right after."
+        confirmLabel="Clear meal plan"
+        destructive
+        onConfirm={handleClearMealPlan}
+        onCancel={() => setConfirmClearMealPlan(false)}
+      />
+
+      <ConfirmDialog
         visible={confirmClear}
         title="Clear all data?"
-        message="This permanently removes every recipe, stock item, plan, and preference on this device. This can't be undone."
+        message="This permanently removes your profile, recipes, Products, Stock, Grocery, Meal Plan, history, preferences, onboarding state, and demo metadata. This can't be undone — export a backup first if you're unsure."
         confirmLabel="Clear everything"
         destructive
         onConfirm={handleClearAllData}
@@ -438,5 +727,45 @@ const styles = StyleSheet.create({
     ...typography.role.metadata,
     color: colors.accentGreen,
     paddingHorizontal: spacing.xs,
+  },
+  exportSection: {
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  countGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  countText: {
+    ...typography.role.metadata,
+    color: colors.textSecondary,
+  },
+  privacyNote: {
+    ...typography.role.metadata,
+    color: colors.textTertiary,
+  },
+  exportButton: {
+    backgroundColor: colors.accentBlue,
+    borderRadius: 12,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  exportButtonLabel: {
+    ...typography.role.body,
+    fontWeight: typography.weight.semibold,
+    color: colors.background,
+  },
+  exportButtonSecondary: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 12,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  exportButtonSecondaryLabel: {
+    ...typography.role.body,
+    color: colors.textPrimary,
   },
 });
