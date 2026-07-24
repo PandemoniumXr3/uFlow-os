@@ -9,6 +9,8 @@ const RECIPES_KEY = 'uflow.recipes';
  */
 export interface RecipeStorageService {
   getAll(): Promise<Recipe[]>;
+  /** Full-array replace — used by import replace/merge, where the caller has already computed the exact final list. */
+  save(recipes: Recipe[]): Promise<void>;
   add(recipe: Recipe): Promise<void>;
   remove(id: string): Promise<void>;
   update(id: string, patch: Partial<Recipe>): Promise<void>;
@@ -20,6 +22,10 @@ export const recipeStorageService: RecipeStorageService = {
   async getAll() {
     const recipes = await asyncStorageClient.getJSON<Recipe[]>(RECIPES_KEY);
     return recipes ?? [];
+  },
+
+  async save(recipes) {
+    await asyncStorageClient.setJSON(RECIPES_KEY, recipes);
   },
 
   async add(recipe) {

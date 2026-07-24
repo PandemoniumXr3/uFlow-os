@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { dismissalStorageService } from '@/services/dismissal/dismissalStorageService';
 import { getPermanentlyHiddenIds, isDismissedForDate as isDismissedForDatePure } from '@/services/dismissal/isDismissedForDate';
@@ -15,12 +16,20 @@ export function useDismissals() {
   const [entries, setEntries] = useState<DismissalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    dismissalStorageService.getAll().then((stored) => {
+  const refetch = useCallback(() => {
+    return dismissalStorageService.getAll().then((stored) => {
       setEntries(stored);
       setIsLoading(false);
     });
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so returning to an already-mounted screen after
+  // a write from elsewhere — e.g. a data import — always shows current data.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const dismissForDay = useCallback(async (recipeId: string, date: string, reason?: DismissalReason) => {
     const entry: DismissalEntry = { id: generateId(), recipeId, scope: 'day', date, reason, dismissedAt: Date.now() };
@@ -38,7 +47,10 @@ export function useDismissals() {
     async (recipeId: string) => {
       const toRemove = entries.filter((entry) => entry.scope === 'permanent' && entry.recipeId === recipeId);
       setEntries((current) => current.filter((entry) => !toRemove.includes(entry)));
-      await Promise.all(toRemove.map((entry) => dismissalStorageService.remove(entry.id)));
+      // removeMany, not Promise.all(map(remove)) — the latter races (each call reads the same
+      // pre-removal snapshot, so only the last write survives). Usually toRemove has one entry, but
+      // nothing prevents duplicate permanent-hide entries for the same recipe from accumulating.
+      await dismissalStorageService.removeMany(toRemove.map((entry) => entry.id));
     },
     [entries]
   );
@@ -61,5 +73,6 @@ export function useDismissals() {
     clearHistory,
     permanentlyHiddenIds,
     isDismissedForDate,
+    refetch,
   };
 }

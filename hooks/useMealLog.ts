@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { mealLogStorageService } from '@/services/mealLog/mealLogStorageService';
 import type { MealLogEntry } from '@/types/mealLog';
@@ -23,12 +24,20 @@ export function useMealLog() {
   const [entries, setEntries] = useState<MealLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    mealLogStorageService.getAll().then((stored) => {
+  const refetch = useCallback(() => {
+    return mealLogStorageService.getAll().then((stored) => {
       setEntries(stored);
       setIsLoading(false);
     });
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so returning to an already-mounted screen after
+  // a write from elsewhere — e.g. a data import — always shows current data.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const logMeal = useCallback(async (recipeId: string, servingsOrOptions: number | LogMealOptions = 1, legacySnapshot?: NutritionInfo) => {
     const options: LogMealOptions =
@@ -93,5 +102,6 @@ export function useMealLog() {
     loggedTodayIds,
     isLoggedToday,
     getEntriesForDate,
+    refetch,
   };
 }

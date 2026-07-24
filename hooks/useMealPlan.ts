@@ -51,6 +51,14 @@ export function useMealPlan() {
     await mealPlanStorageService.remove(id);
   }, []);
 
+  /** Removes several entries as one read+write — callers with more than one id to remove (e.g. "Clear this day") must use this instead of looping removePlannedMeal via Promise.all, which races (see mealPlanStorageService.removeMany). */
+  const removeManyPlannedMeals = useCallback(async (ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setEntries((current) => current.filter((entry) => !idSet.has(entry.id)));
+    await mealPlanStorageService.removeMany(ids);
+  }, []);
+
   const updatePlannedMeal = useCallback(async (id: string, patch: PlannedMealUpdate) => {
     setEntries((current) => current.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
     await mealPlanStorageService.update(id, patch);
@@ -144,8 +152,8 @@ export function useMealPlan() {
   /** Removes every not-yet-eaten planned meal from tomorrow onward — used by "Clear future planned meals", always behind an explicit confirmation in the UI. */
   const clearFuturePlannedMeals = useCallback(async () => {
     const toRemove = entries.filter((entry) => entry.date > todayKey);
-    await Promise.all(toRemove.map((entry) => removePlannedMeal(entry.id)));
-  }, [entries, todayKey, removePlannedMeal]);
+    await removeManyPlannedMeals(toRemove.map((entry) => entry.id));
+  }, [entries, todayKey, removeManyPlannedMeals]);
 
   const findEntry = useCallback(
     (recipeId: string, date: string) => entries.find((entry) => entry.recipeId === recipeId && entry.date === date),
@@ -208,6 +216,7 @@ export function useMealPlan() {
     togglePlannedOnDate,
     addPlannedMeal,
     removePlannedMeal,
+    removeManyPlannedMeals,
     updatePlannedMeal,
     movePlannedMeal,
     copyPlannedMeal,

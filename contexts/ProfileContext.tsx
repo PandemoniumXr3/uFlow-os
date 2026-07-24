@@ -27,6 +27,8 @@ interface ProfileContextValue {
   skipOnboarding: () => void;
   rerunOnboarding: () => void;
   setOnboardingPriorities: (priorities: OnboardingPriority[]) => void;
+  /** Re-reads the profile from storage — needed after a write that bypasses this context entirely, e.g. a data import. Every other mutation above already keeps this context's own state in sync. */
+  reloadProfile: () => Promise<void>;
 }
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
@@ -47,19 +49,22 @@ export function ProfileProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    profileStorageService.get().then(async (stored) => {
-      // isExistingUserByData only matters when `stored` is null — see resolveOnboardingForProfile.
-      const isExistingUserByData = stored ? false : detectExistingUser(await gatherExistingUserSignals());
-      const { profile: resolved, wasCreated } = resolveOnboardingForProfile(stored, isExistingUserByData, Date.now());
+  const reloadProfile = useCallback(async () => {
+    const stored = await profileStorageService.get();
+    // isExistingUserByData only matters when `stored` is null — see resolveOnboardingForProfile.
+    const isExistingUserByData = stored ? false : detectExistingUser(await gatherExistingUserSignals());
+    const { profile: resolved, wasCreated } = resolveOnboardingForProfile(stored, isExistingUserByData, Date.now());
 
-      if (wasCreated || resolved !== stored) {
-        await profileStorageService.save(resolved);
-      }
-      setProfile(resolved);
-      setIsLoading(false);
-    });
+    if (wasCreated || resolved !== stored) {
+      await profileStorageService.save(resolved);
+    }
+    setProfile(resolved);
+    setIsLoading(false);
   }, []);
+
+  useEffect(() => {
+    reloadProfile();
+  }, [reloadProfile]);
 
   const setNutritionTrackingEnabled = useCallback((value: boolean) => {
     setProfile((current) => {
@@ -198,6 +203,7 @@ export function ProfileProvider({ children }: PropsWithChildren) {
     skipOnboarding,
     rerunOnboarding,
     setOnboardingPriorities,
+    reloadProfile,
   };
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;

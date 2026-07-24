@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { shoppingStorageService } from '@/services/shopping/shoppingStorageService';
 import type { InventoryItem } from '@/types/inventory';
@@ -40,8 +41,8 @@ export function useShoppingList(input: UseShoppingListInput) {
   const [overlay, setOverlay] = useState<AutomaticItemOverlay>({});
   const [storageLoaded, setStorageLoaded] = useState(false);
 
-  useEffect(() => {
-    Promise.all([shoppingStorageService.getManualItems(), shoppingStorageService.getOverlay()]).then(
+  const refetch = useCallback(() => {
+    return Promise.all([shoppingStorageService.getManualItems(), shoppingStorageService.getOverlay()]).then(
       ([storedManualItems, storedOverlay]) => {
         setManualItems(storedManualItems);
         setOverlay(storedOverlay);
@@ -49,6 +50,14 @@ export function useShoppingList(input: UseShoppingListInput) {
       }
     );
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so returning to an already-mounted screen after
+  // a write from elsewhere — e.g. a data import — always shows current data.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const isLoading = inputsLoading || !storageLoaded;
 
@@ -171,5 +180,6 @@ export function useShoppingList(input: UseShoppingListInput) {
     setChecked,
     hideAutomaticItem,
     regenerate,
+    refetch,
   };
 }

@@ -10,6 +10,8 @@ const PRODUCTS_KEY = 'uflow.products';
  */
 export interface ProductStorageService {
   getAll(): Promise<Product[]>;
+  /** Full-array replace — used by import replace/merge, where the caller has already computed the exact final list. */
+  save(products: Product[]): Promise<void>;
   add(product: Product): Promise<void>;
   remove(id: string): Promise<void>;
   update(id: string, patch: Partial<Product>): Promise<void>;
@@ -21,6 +23,10 @@ export const productStorageService: ProductStorageService = {
   async getAll() {
     const products = await asyncStorageClient.getJSON<Product[]>(PRODUCTS_KEY);
     return products ?? [];
+  },
+
+  async save(products) {
+    await asyncStorageClient.setJSON(PRODUCTS_KEY, products);
   },
 
   async add(product) {

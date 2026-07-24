@@ -10,6 +10,8 @@ const MEAL_LOG_KEY = 'uflow.mealLog';
  */
 export interface MealLogStorageService {
   getAll(): Promise<MealLogEntry[]>;
+  /** Full-array replace — used by import replace/merge, where the caller has already computed the exact final list. */
+  save(entries: MealLogEntry[]): Promise<void>;
   add(entry: MealLogEntry): Promise<void>;
 }
 
@@ -17,6 +19,10 @@ export const mealLogStorageService: MealLogStorageService = {
   async getAll() {
     const entries = await asyncStorageClient.getJSON<MealLogEntry[]>(MEAL_LOG_KEY);
     return entries ?? [];
+  },
+
+  async save(entries) {
+    await asyncStorageClient.setJSON(MEAL_LOG_KEY, entries);
   },
 
   async add(entry) {

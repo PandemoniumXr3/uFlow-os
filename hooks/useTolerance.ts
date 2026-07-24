@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { toleranceStorageService } from '@/services/tolerance/toleranceStorageService';
 import { DEFAULT_TOLERANCE_PROFILE, type Allergen, type Intolerance, type ToleranceProfile } from '@/types/tolerance';
@@ -11,12 +12,20 @@ export function useTolerance() {
   const [profile, setProfile] = useState<ToleranceProfile>(DEFAULT_TOLERANCE_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    toleranceStorageService.get().then((stored) => {
+  const refetch = useCallback(() => {
+    return toleranceStorageService.get().then((stored) => {
       setProfile(stored);
       setIsLoading(false);
     });
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so returning to an already-mounted screen after
+  // a write from elsewhere — e.g. a data import — always shows current data.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const persist = useCallback((next: ToleranceProfile) => {
     setProfile(next);
@@ -44,5 +53,5 @@ export function useTolerance() {
     [profile, persist]
   );
 
-  return { profile, isLoading, toggleAllergen, toggleIntolerance, setSafeMealsOnly };
+  return { profile, isLoading, toggleAllergen, toggleIntolerance, setSafeMealsOnly, refetch };
 }

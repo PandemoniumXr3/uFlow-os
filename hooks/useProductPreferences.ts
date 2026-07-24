@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { ALWAYS_IN_STOCK_SEED_NAMES } from '@/constants/alwaysInStockSeed';
 import { inventoryStorageService } from '@/services/inventory/inventoryStorageService';
@@ -15,38 +16,45 @@ export function useProductPreferences(products: Product[], productsLoading: bool
   const [preferences, setPreferences] = useState<ProductPreferences>(DEFAULT_PRODUCT_PREFERENCES);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const refetch = useCallback(async () => {
     if (productsLoading) return;
 
-    productPreferencesStorageService.get().then(async (stored) => {
-      if (stored) {
-        setPreferences(stored);
-        setIsLoading(false);
-        return;
-      }
-
-      // Never saved. Before falling back to the suggested seed list, check
-      // for a pre-existing "always in stock" signal on legacy InventoryItem
-      // records (from before always-in-stock was split out as its own
-      // preference) — a one-time, read-only peek so upgrading doesn't lose
-      // a setting a user already made.
-      const legacyItems = await inventoryStorageService.getAll();
-      const legacyAlwaysInStockIds = legacyItems
-        .filter((item) => (item as unknown as { alwaysInStock?: boolean }).alwaysInStock === true)
-        .map((item) => item.productId);
-
-      let seededIds = legacyAlwaysInStockIds;
-      if (seededIds.length === 0) {
-        const alwaysInStockNames = new Set(ALWAYS_IN_STOCK_SEED_NAMES.map(normalizeIngredient));
-        seededIds = products.filter((product) => alwaysInStockNames.has(normalizeIngredient(product.name))).map((p) => p.id);
-      }
-
-      const seeded: ProductPreferences = { alwaysInStockProductIds: seededIds };
-      await productPreferencesStorageService.save(seeded);
-      setPreferences(seeded);
+    const stored = await productPreferencesStorageService.get();
+    if (stored) {
+      setPreferences(stored);
       setIsLoading(false);
-    });
+      return;
+    }
+
+    // Never saved. Before falling back to the suggested seed list, check
+    // for a pre-existing "always in stock" signal on legacy InventoryItem
+    // records (from before always-in-stock was split out as its own
+    // preference) — a one-time, read-only peek so upgrading doesn't lose
+    // a setting a user already made.
+    const legacyItems = await inventoryStorageService.getAll();
+    const legacyAlwaysInStockIds = legacyItems
+      .filter((item) => (item as unknown as { alwaysInStock?: boolean }).alwaysInStock === true)
+      .map((item) => item.productId);
+
+    let seededIds = legacyAlwaysInStockIds;
+    if (seededIds.length === 0) {
+      const alwaysInStockNames = new Set(ALWAYS_IN_STOCK_SEED_NAMES.map(normalizeIngredient));
+      seededIds = products.filter((product) => alwaysInStockNames.has(normalizeIngredient(product.name))).map((p) => p.id);
+    }
+
+    const seeded: ProductPreferences = { alwaysInStockProductIds: seededIds };
+    await productPreferencesStorageService.save(seeded);
+    setPreferences(seeded);
+    setIsLoading(false);
   }, [products, productsLoading]);
+
+  // useFocusEffect (not a plain mount-only effect) so returning to an already-mounted screen after
+  // a write from elsewhere — e.g. a data import — always shows current data.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const alwaysInStockIds = useMemo(
     () => new Set(preferences.alwaysInStockProductIds),
@@ -102,5 +110,6 @@ export function useProductPreferences(products: Product[], productsLoading: bool
     getIngredientTier,
     setIngredientTier,
     avoidedProductIds,
+    refetch,
   };
 }

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 
 import { DEFAULT_SAFE_MEAL_IDS } from '@/constants/safeMealsSeed';
 import { safeMealsStorageService } from '@/services/safeMeals/safeMealsStorageService';
@@ -8,23 +9,30 @@ export function useSafeMeals() {
   const [profile, setProfile] = useState<SafeMealsProfile>(DEFAULT_SAFE_MEALS_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    safeMealsStorageService.get().then(async (stored) => {
-      if (stored.recipeIds.length > 0 || !__DEV__) {
-        setProfile(stored);
-        setIsLoading(false);
-        return;
-      }
-
-      // Dev/testing-only seed (see constants/safeMealsSeed.ts) — a real new user starts empty.
-      const seeded = await safeMealsStorageService.seedIfEmpty({
-        recipeIds: DEFAULT_SAFE_MEAL_IDS,
-        showSafeOnly: false,
-      });
-      setProfile(seeded);
+  const refetch = useCallback(async () => {
+    const stored = await safeMealsStorageService.get();
+    if (stored.recipeIds.length > 0 || !__DEV__) {
+      setProfile(stored);
       setIsLoading(false);
+      return;
+    }
+
+    // Dev/testing-only seed (see constants/safeMealsSeed.ts) — a real new user starts empty.
+    const seeded = await safeMealsStorageService.seedIfEmpty({
+      recipeIds: DEFAULT_SAFE_MEAL_IDS,
+      showSafeOnly: false,
     });
+    setProfile(seeded);
+    setIsLoading(false);
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so returning to an already-mounted screen after
+  // a write from elsewhere — e.g. a data import — always shows current data.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const safeMealIds = useMemo(() => new Set(profile.recipeIds), [profile.recipeIds]);
 
@@ -49,5 +57,5 @@ export function useSafeMeals() {
     });
   }, []);
 
-  return { profile, isLoading, safeMealIds, isSafeMeal, toggleSafeMeal, setShowSafeOnly };
+  return { profile, isLoading, safeMealIds, isSafeMeal, toggleSafeMeal, setShowSafeOnly, refetch };
 }

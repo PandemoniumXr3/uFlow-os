@@ -283,7 +283,9 @@ export default function DayDetailScreen() {
   ];
 
   function clearDay() {
-    Promise.all(dayMeals.map((meal) => mealPlan.removePlannedMeal(meal.id)));
+    // removeManyPlannedMeals, not Promise.all(map(removePlannedMeal)) — the latter races (each call
+    // reads the same pre-removal snapshot, so only the last write survives and siblings are dropped).
+    mealPlan.removeManyPlannedMeals(dayMeals.map((meal) => meal.id));
     setConfirmClear(false);
   }
 

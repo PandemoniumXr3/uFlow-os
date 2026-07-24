@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { dietStorageService } from '@/services/diet/dietStorageService';
 import { DEFAULT_DIET_PROFILE, type DietProfile, type DietType } from '@/types/diet';
@@ -16,13 +17,21 @@ export function useDiet() {
   const [profile, setProfile] = useState<DietProfile>(DEFAULT_DIET_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
+  const refetch = useCallback(() => {
     const load = __DEV__ ? dietStorageService.seedIfEmpty(DEV_PROFILE_DIET_SEED) : dietStorageService.get();
-    load.then((stored) => {
+    return load.then((stored) => {
       setProfile(stored);
       setIsLoading(false);
     });
   }, []);
+
+  // useFocusEffect (not a plain mount-only effect) so returning to an already-mounted screen after
+  // a write from elsewhere — e.g. a data import — always shows current data.
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   const persist = useCallback((next: DietProfile) => {
     setProfile(next);
@@ -43,5 +52,5 @@ export function useDiet() {
     [profile, persist]
   );
 
-  return { profile, isLoading, toggleDiet, setMatchDietOnly };
+  return { profile, isLoading, toggleDiet, setMatchDietOnly, refetch };
 }
