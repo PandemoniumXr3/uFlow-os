@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, usePathname, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -19,6 +19,7 @@ import { useDemoData } from '@/hooks/useDemoData';
 import { useDismissals } from '@/hooks/useDismissals';
 import { useProfile } from '@/hooks/useProfile';
 import { useReducedMotionPreference } from '@/hooks/useReducedMotionPreference';
+import { getFeedbackContext, sendFeedback, type FeedbackCategory } from '@/services/feedback/feedbackMail';
 import { inventoryStorageService } from '@/services/inventory/inventoryStorageService';
 import { mealLogStorageService } from '@/services/mealLog/mealLogStorageService';
 import { mealPlanStorageService } from '@/services/mealPlan/mealPlanStorageService';
@@ -40,6 +41,7 @@ const ROWS: SettingsRow[] = [
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const pathname = usePathname();
   const {
     profile,
     setNutritionTrackingEnabled,
@@ -77,6 +79,9 @@ export default function SettingsScreen() {
   const [confirmClearStock, setConfirmClearStock] = useState(false);
   const [confirmClearMealPlan, setConfirmClearMealPlan] = useState(false);
 
+  const [sendingFeedback, setSendingFeedback] = useState<FeedbackCategory | null>(null);
+  const [feedbackNote, setFeedbackNote] = useState<string | null>(null);
+
   useEffect(() => {
     setWeeklyBudgetInput(budgetPreferences.weeklyBudgetCents != null ? String(budgetPreferences.weeklyBudgetCents / 100) : '');
     setMaxMealCostInput(budgetPreferences.preferredMaxMealCostCents != null ? String(budgetPreferences.preferredMaxMealCostCents / 100) : '');
@@ -96,6 +101,21 @@ export default function SettingsScreen() {
     await clearHistory();
     setConfirmClearSuggestions(false);
     setSuggestionsCleared(true);
+  }
+
+  async function handleSendFeedback(category: FeedbackCategory) {
+    setSendingFeedback(category);
+    setFeedbackNote(null);
+    const context = getFeedbackContext(pathname);
+    const result = await sendFeedback(category, context);
+    setSendingFeedback(null);
+    if (!result.success) {
+      setFeedbackNote("Couldn't open mail or copy the report. Please try again.");
+    } else if (result.method === 'clipboard') {
+      setFeedbackNote('No mail app found — the report was copied instead. Paste it into an email to send.');
+    } else {
+      setFeedbackNote('Opened in your mail app — review the message, then send.');
+    }
   }
 
   function handleRerunOnboarding() {
@@ -564,6 +584,56 @@ export default function SettingsScreen() {
               </View>
             </Pressable>
           </Card>
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader title="Beta feedback" />
+          <Card variant="standard" style={styles.groupCard}>
+            <Pressable
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              onPress={() => handleSendFeedback('bug')}
+              accessibilityRole="button"
+              accessibilityLabel="Report a bug"
+              accessibilityState={{ disabled: sendingFeedback != null }}
+              disabled={sendingFeedback != null}>
+              <Ionicons name="bug-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Report a bug</Text>
+                <Text style={styles.rowDescription}>Something broke or looked wrong. Includes app version and screen, never your food data.</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
+              onPress={() => handleSendFeedback('suggestion')}
+              accessibilityRole="button"
+              accessibilityLabel="Suggest an improvement"
+              accessibilityState={{ disabled: sendingFeedback != null }}
+              disabled={sendingFeedback != null}>
+              <Ionicons name="bulb-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Suggest an improvement</Text>
+                <Text style={styles.rowDescription}>Something that could work better.</Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.row, styles.rowDivider, pressed && styles.rowPressed]}
+              onPress={() => handleSendFeedback('general')}
+              accessibilityRole="button"
+              accessibilityLabel="General feedback"
+              accessibilityState={{ disabled: sendingFeedback != null }}
+              disabled={sendingFeedback != null}>
+              <Ionicons name="chatbubble-ellipses-outline" size={iconSize.md} color={colors.accentBlue} />
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>General feedback</Text>
+                <Text style={styles.rowDescription}>Anything else — what's working, what isn't.</Text>
+              </View>
+            </Pressable>
+          </Card>
+          {feedbackNote && (
+            <Text style={styles.clearedNote} accessibilityLiveRegion="polite">
+              {feedbackNote}
+            </Text>
+          )}
         </View>
 
         {profile && (
