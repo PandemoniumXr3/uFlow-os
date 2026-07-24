@@ -4,13 +4,14 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
+import { AppErrorBoundary } from '@/components/ui/AppErrorBoundary';
 import { UndoBanner } from '@/components/ui/UndoBanner';
 import { colors } from '@/constants/theme';
 import { ProfileProvider } from '@/contexts/ProfileContext';
 import { UndoProvider } from '@/contexts/UndoContext';
 import { useProfile } from '@/hooks/useProfile';
 
-export { ErrorBoundary } from 'expo-router';
+export { AppErrorBoundary as ErrorBoundary };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
