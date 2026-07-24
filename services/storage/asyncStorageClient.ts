@@ -24,4 +24,17 @@ export const asyncStorageClient = {
   async clearAll(): Promise<void> {
     await AsyncStorage.clear();
   },
+
+  /** Byte-exact read/write, bypassing JSON parse/stringify — used only by import rollback snapshotting, which must restore a key to its exact prior state (including "never written", i.e. null) without any re-serialization risk. */
+  async getRaw(key: string): Promise<string | null> {
+    return AsyncStorage.getItem(key);
+  },
+
+  async setRaw(key: string, value: string | null): Promise<void> {
+    if (value === null) {
+      await AsyncStorage.removeItem(key);
+    } else {
+      await AsyncStorage.setItem(key, value);
+    }
+  },
 };
