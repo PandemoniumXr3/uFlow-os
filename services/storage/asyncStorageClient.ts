@@ -9,10 +9,26 @@ export const asyncStorageClient = {
   async getJSON<T>(key: string): Promise<T | null> {
     const raw = await AsyncStorage.getItem(key);
     if (raw == null) return null;
-    return JSON.parse(raw) as T;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      // A key can end up holding an unparseable value from an earlier bug (e.g. the literal string
+      // "undefined" — see setJSON below). Treat anything that fails to parse the same as "nothing
+      // stored" rather than throwing and crashing whatever screen reads it; this also self-heals any
+      // storage a past version of the app already corrupted this way.
+      return null;
+    }
   },
 
   async setJSON<T>(key: string, value: T): Promise<void> {
+    if (value === undefined) {
+      // JSON.stringify(undefined) returns the actual value `undefined`, not a string. Passing that to
+      // AsyncStorage.setItem is a type violation that, on web (backed by localStorage, whose setItem
+      // coerces its argument via ToString()), silently persists the literal string "undefined" —
+      // which then fails to JSON.parse on every future read. Treat "nothing to store" as "no key".
+      await AsyncStorage.removeItem(key);
+      return;
+    }
     await AsyncStorage.setItem(key, JSON.stringify(value));
   },
 
